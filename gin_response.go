@@ -78,6 +78,7 @@ func standardErrorStmt() *ast.IfStmt {
 						},
 					},
 				},
+				&ast.ReturnStmt{},
 			},
 		},
 	}

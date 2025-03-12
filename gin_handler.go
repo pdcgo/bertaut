@@ -4,27 +4,11 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
-	"log"
 )
 
 type ginHandler struct {
 	ft     *ast.FuncType
 	fnname string
-}
-
-func (gh *ginHandler) parameterAst() {
-	for _, d := range gh.ft.Params.List {
-		log.Println(d.Names)
-	}
-
-	if gh.ft.TypeParams != nil {
-		for _, d := range gh.ft.TypeParams.List {
-			log.Println("type", d)
-		}
-	} else {
-		log.Println("type nil")
-	}
-
 }
 
 func (gh *ginHandler) prepareDeclAst() ([]ast.Stmt, []ast.Expr) {
@@ -78,8 +62,34 @@ func (gh *ginHandler) prepareDeclAst() ([]ast.Stmt, []ast.Expr) {
 			}
 			fmt.Println("}")
 		case *ast.StarExpr:
-			// fmt.Println("Pointer to:", printExprTypeInner(t.X)) // Example: "*User"
+			varname := ast.NewIdent(resname())
+			hasil = append(hasil, &ast.DeclStmt{
+				Decl: &ast.GenDecl{
+					Tok: token.VAR,
+					Specs: []ast.Spec{
+						&ast.ValueSpec{
+							Names: []*ast.Ident{varname},
+							Type:  t,
+						},
+					},
+				},
+			})
+			variable = append(variable, varname)
 		case *ast.SelectorExpr:
+			varname := ast.NewIdent(resname())
+			hasil = append(hasil, &ast.DeclStmt{
+				Decl: &ast.GenDecl{
+					Tok: token.VAR,
+					Specs: []ast.Spec{
+						&ast.ValueSpec{
+							Names: []*ast.Ident{varname},
+							Type:  ast.NewIdent(t.Sel.Name),
+						},
+					},
+				},
+			})
+			variable = append(variable, varname)
+
 			fmt.Println("Selector:", t.Sel.Name) // Example: "pkg.Type"
 		default:
 			fmt.Printf("Unknown Type: %T\n", d)
@@ -101,7 +111,7 @@ func printExprTypeInner(expr ast.Expr) string {
 }
 
 func (gh *ginHandler) Ast() *ast.FuncLit {
-	gh.parameterAst()
+
 	declaration, varnames := gh.prepareDeclAst()
 	varres, _ := varnames[0].(*ast.Ident)
 	resname := varres.Name
@@ -110,8 +120,30 @@ func (gh *ginHandler) Ast() *ast.FuncLit {
 		resname = ""
 	}
 
-	declaration = append(declaration, // err = srv.CreateUser()
-		&ast.AssignStmt{
+	decsrvparam, srvparam := fieldToVar(gh.ft.Params.List) // parameter untuk serivce
+	declaration = append(declaration, decsrvparam...)
+
+	for _, d := range srvparam {
+		name := getName(d)
+		switch name {
+		case "query":
+			declaration = append(declaration,
+				ginBindQuery(d),
+				standardErrorStmt(),
+			)
+		case "payload":
+			declaration = append(declaration,
+				ginBindJson(d),
+				standardErrorStmt(),
+			)
+
+		}
+
+	}
+
+	declaration = append(declaration,
+		// ginBindQuery(srvparam[0]),
+		&ast.AssignStmt{ // err = srv.CreateUser()
 			Lhs: varnames,
 			Tok: token.ASSIGN,
 			Rhs: []ast.Expr{
@@ -120,6 +152,7 @@ func (gh *ginHandler) Ast() *ast.FuncLit {
 						X:   ast.NewIdent("srv"),
 						Sel: ast.NewIdent(gh.fnname),
 					},
+					Args: srvparam,
 				},
 			},
 		},

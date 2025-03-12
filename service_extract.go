@@ -158,6 +158,10 @@ func (r *RegisterFile) Write() error {
 		return err
 	}
 
+	if err := formatImportFile(filename); err != nil {
+		return err
+	}
+
 	return nil
 }
 

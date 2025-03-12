@@ -6,18 +6,28 @@ type User struct {
 	Name string
 }
 
+type ItemQuery struct {
+	ItemID uint
+}
+
+type CCPayload struct {
+	Dta string
+}
+
 // bertaut_api: /users
 // test doc
 type UserService interface {
 	// method: get
 	// Deprecated: asdasdasd
-	Item(userID uint) (User, error)
+	Item(query *ItemQuery, payload *CCPayload) (User, error)
 	// method: get
 	Info() (*models.UserInfo, error)
 	// method: post
-	CreateUser() error
+	CreateUser(payload *CCPayload) error
 	// method: delete
 	DeleteUser(user User) error
+	// method: post
+	GetInfo(payload *CCPayload) (*models.UserInfo, error)
 }
 
 // func(ctx *gin.Context) {
