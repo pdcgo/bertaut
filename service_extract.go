@@ -7,7 +7,6 @@ import (
 	"go/doc"
 	"go/format"
 	"go/token"
-	"log"
 	"os"
 	"regexp"
 	"strings"
@@ -18,23 +17,38 @@ var identifier = "bertaut_api:"
 func TestService(fs *token.FileSet, pkg *doc.Package, t *doc.Type) error {
 	var err error
 	reg := NewRegisterFile(fs, pkg, t)
-	log.Println(t.Methods, t.Consts)
 
-	for _, fn := range t.Methods {
-		log.Println(fn.Doc, "asdasd")
-		// log.Println(fn.Name)
-	}
+	fmt.Printf("generating %s\n", t.Name)
 
 	err = reg.
 		Initialize().
-		RegisterFunc(func() error {
+		RegisterFunc(func() ([]*ast.CallExpr, error) {
+			var err error
+			var hasil []*ast.CallExpr
 
-			return nil
+			if iface, ok := t.Decl.Specs[0].(*ast.TypeSpec).Type.(*ast.InterfaceType); ok {
+				reg := ginCallHandle{
+					iface:     iface,
+					ifaceName: t.Name,
+					baseuri:   reg.base,
+				}
+
+				hasil, err = reg.registerGinHandlers()
+			}
+
+			return hasil, err
+
 		}).
 		MemberFunc().
 		Write()
 
 	return err
+}
+
+type ParserCtx struct {
+	fs  *token.FileSet
+	t   *doc.Type
+	pkg *doc.Package
 }
 
 type RegErr struct {
@@ -49,9 +63,7 @@ func (r *RegErr) Error() string {
 }
 
 type RegisterFile struct {
-	fs  *token.FileSet
-	t   *doc.Type
-	pkg *doc.Package
+	ctx *ParserCtx
 	ast *ast.File
 	err error
 
@@ -74,59 +86,25 @@ func (r *RegisterFile) Initialize() *RegisterFile {
 
 func (r *RegisterFile) MemberFunc() *RegisterFile {
 
-	if iface, ok := r.t.Decl.Specs[0].(*ast.TypeSpec).Type.(*ast.InterfaceType); ok {
-		for _, d := range iface.Methods.List {
-			log.Println(d.Doc.List[0], "asdasd")
-		}
-	}
-
 	return r
 }
 
-func (r *RegisterFile) RegisterFunc(handle func() error) *RegisterFile {
+func (r *RegisterFile) RegisterFunc(handle func() ([]*ast.CallExpr, error)) *RegisterFile {
 	if r.err != nil {
 		return r
 	}
 
-	funcname := "Register" + r.t.Name + "Api"
-
-	handleCall := &ast.CallExpr{
-		Fun: &ast.SelectorExpr{ // g.Handle
-			X:   ast.NewIdent("g"),
-			Sel: ast.NewIdent("Handle"),
-		},
-		Args: []ast.Expr{
-			// http.MethodPost
-			&ast.SelectorExpr{
-				X:   ast.NewIdent("http"),
-				Sel: ast.NewIdent("MethodPost"),
-			},
-			// "test"
-			&ast.BasicLit{
-				Kind:  token.STRING,
-				Value: `"test"`,
-			},
-			// func(ctx *gin.Context) {}
-			&ast.FuncLit{
-				Type: &ast.FuncType{
-					Params: &ast.FieldList{
-						List: []*ast.Field{
-							{
-								Names: []*ast.Ident{ast.NewIdent("ctx")},
-								Type: &ast.StarExpr{ // *gin.Context
-									X: &ast.SelectorExpr{
-										X:   ast.NewIdent("gin"),
-										Sel: ast.NewIdent("Context"),
-									},
-								},
-							},
-						},
-					},
-				},
-				Body: &ast.BlockStmt{List: []ast.Stmt{}}, // Empty function body
-			},
-		},
+	stmts, err := handle()
+	if err != nil {
+		return r.setErr(err)
 	}
+
+	body := make([]ast.Stmt, len(stmts))
+	for i, stmt := range stmts {
+		body[i] = &ast.ExprStmt{X: stmt}
+	}
+
+	funcname := "Register" + r.ctx.t.Name + "Api"
 
 	funcDecl := &ast.FuncDecl{
 		Name: ast.NewIdent(funcname), // Function name
@@ -135,7 +113,7 @@ func (r *RegisterFile) RegisterFunc(handle func() error) *RegisterFile {
 				List: []*ast.Field{
 					{
 						Names: []*ast.Ident{ast.NewIdent("srv")}, // Parameter name: usr
-						Type:  ast.NewIdent(r.t.Name),            // Parameter type: UserApi
+						Type:  ast.NewIdent(r.ctx.t.Name),        // Parameter type: UserApi
 					},
 					{
 						Names: []*ast.Ident{ast.NewIdent("g")}, // Parameter name: g
@@ -149,9 +127,7 @@ func (r *RegisterFile) RegisterFunc(handle func() error) *RegisterFile {
 				},
 			},
 		},
-		Body: &ast.BlockStmt{List: []ast.Stmt{
-			&ast.ExprStmt{X: handleCall},
-		}},
+		Body: &ast.BlockStmt{List: body},
 	}
 
 	r.ast.Decls = append(r.ast.Decls, funcDecl)
@@ -160,7 +136,7 @@ func (r *RegisterFile) RegisterFunc(handle func() error) *RegisterFile {
 }
 
 func (r *RegisterFile) Filename() string {
-	pos := r.fs.Position(r.t.Decl.Pos())
+	pos := r.ctx.fs.Position(r.ctx.t.Decl.Pos())
 	return strings.Replace(pos.Filename, ".go", "_api_gen.go", 1)
 }
 
@@ -186,7 +162,7 @@ func (r *RegisterFile) Write() error {
 }
 
 func (r *RegisterFile) genError(msg string) error {
-	pos := r.fs.Position(r.t.Decl.Pos())
+	pos := r.ctx.fs.Position(r.ctx.t.Decl.Pos())
 	return &RegErr{
 		Msg:  msg,
 		Path: pos.Filename,
@@ -194,7 +170,7 @@ func (r *RegisterFile) genError(msg string) error {
 }
 
 func (r *RegisterFile) baseRoute() (string, error) {
-	raws := strings.Split(r.t.Doc, "\n")
+	raws := strings.Split(r.ctx.t.Doc, "\n")
 	for _, raw := range raws {
 		if !strings.Contains(raw, identifier) {
 			continue
@@ -230,9 +206,11 @@ func (r *RegisterFile) setErr(err error) *RegisterFile {
 func NewRegisterFile(fs *token.FileSet, pkg *doc.Package, t *doc.Type) *RegisterFile {
 
 	return &RegisterFile{
-		fs:  fs,
-		t:   t,
-		pkg: pkg,
+		ctx: &ParserCtx{
+			fs:  fs,
+			t:   t,
+			pkg: pkg,
+		},
 		ast: &ast.File{
 			Name: ast.NewIdent(pkg.Name),
 			Decls: []ast.Decl{
