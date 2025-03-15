@@ -137,6 +137,17 @@ func (gh *ginHandler) Ast() *ast.FuncLit {
 				standardErrorStmt(),
 			)
 
+		case "identity":
+			declaration = append(declaration,
+				buildFromCtx("identity"),
+				standardErrorStmt(),
+			)
+
+		default:
+			declaration = append(declaration,
+				buildFromCtx(name),
+				standardErrorStmt(),
+			)
 		}
 
 	}
@@ -183,4 +194,88 @@ func (gh *ginHandler) Ast() *ast.FuncLit {
 	}
 
 	return fn
+}
+
+func buildFromCtx(callname string) *ast.AssignStmt {
+	assignStmt := &ast.AssignStmt{
+		Lhs: []ast.Expr{
+			&ast.Ident{Name: "err"}, // Left-hand side (LHS): err
+		},
+		Tok: token.ASSIGN, // Assignment operator: =
+		Rhs: []ast.Expr{
+			&ast.CallExpr{
+				Fun: &ast.SelectorExpr{
+					X:   &ast.Ident{Name: callname},       // Receiver: identity
+					Sel: &ast.Ident{Name: "BuildFromCtx"}, // Method: BuildFromCtx
+				},
+				Args: []ast.Expr{
+					&ast.Ident{Name: "ctx"}, // Argument: ctx
+				},
+			},
+		},
+	}
+
+	return assignStmt
+}
+
+func documentationCall(uri string) *ast.IfStmt {
+	ifStmt := &ast.IfStmt{
+		Cond: &ast.BinaryExpr{
+			X:  &ast.Ident{Name: "doc"},
+			Op: token.NEQ, // "!=" operator
+			Y:  &ast.Ident{Name: "nil"},
+		},
+		Body: &ast.BlockStmt{
+			List: []ast.Stmt{
+				// err = doc(http.MethodGet, g.BasePath()+"/users/item", nil, nil)
+				&ast.AssignStmt{
+					Lhs: []ast.Expr{&ast.Ident{Name: "err"}},
+					Tok: token.ASSIGN,
+					Rhs: []ast.Expr{
+						&ast.CallExpr{
+							Fun: &ast.Ident{Name: "doc"},
+							Args: []ast.Expr{
+								&ast.SelectorExpr{
+									X:   &ast.Ident{Name: "http"},
+									Sel: &ast.Ident{Name: "MethodGet"},
+								},
+								&ast.BinaryExpr{
+									X: &ast.CallExpr{
+										Fun: &ast.SelectorExpr{
+											X:   &ast.Ident{Name: "g"},
+											Sel: &ast.Ident{Name: "BasePath"},
+										},
+									},
+									Op: token.ADD,
+									Y:  &ast.BasicLit{Kind: token.STRING, Value: fmt.Sprintf(`"%s"`, uri)},
+								},
+								&ast.Ident{Name: "nil"},
+								&ast.Ident{Name: "nil"},
+							},
+						},
+					},
+				},
+				// if err != nil { panic(err) }
+				&ast.IfStmt{
+					Cond: &ast.BinaryExpr{
+						X:  &ast.Ident{Name: "err"},
+						Op: token.NEQ, // "!=" operator
+						Y:  &ast.Ident{Name: "nil"},
+					},
+					Body: &ast.BlockStmt{
+						List: []ast.Stmt{
+							&ast.ExprStmt{
+								X: &ast.CallExpr{
+									Fun:  &ast.Ident{Name: "panic"},
+									Args: []ast.Expr{&ast.Ident{Name: "err"}},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	return ifStmt
 }

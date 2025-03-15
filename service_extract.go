@@ -99,9 +99,22 @@ func (r *RegisterFile) RegisterFunc(handle func() ([]*ast.CallExpr, error)) *Reg
 		return r.setErr(err)
 	}
 
-	body := make([]ast.Stmt, len(stmts))
-	for i, stmt := range stmts {
-		body[i] = &ast.ExprStmt{X: stmt}
+	body := []ast.Stmt{}
+	body = append(body, &ast.DeclStmt{
+		Decl: &ast.GenDecl{
+			Tok: token.VAR,
+			Specs: []ast.Spec{
+				&ast.ValueSpec{
+					Names: []*ast.Ident{ast.NewIdent("err")},
+					Type:  ast.NewIdent("error"),
+				},
+			},
+		},
+	})
+
+	for _, stmt := range stmts {
+		body = append(body, &ast.ExprStmt{X: stmt})
+		body = append(body, documentationCall("/users"))
 	}
 
 	funcname := "Register" + r.ctx.t.Name + "Api"
@@ -121,6 +134,38 @@ func (r *RegisterFile) RegisterFunc(handle func() ([]*ast.CallExpr, error)) *Reg
 							X: &ast.SelectorExpr{
 								X:   ast.NewIdent("gin"),         // Package name: gin
 								Sel: ast.NewIdent("RouterGroup"), // Struct name: RouterGroup
+							},
+						},
+					},
+					{
+						Names: []*ast.Ident{{Name: "doc"}},
+						Type: &ast.FuncType{
+							Params: &ast.FieldList{
+								List: []*ast.Field{
+									{
+										Names: []*ast.Ident{{Name: "method"}},
+										Type:  &ast.Ident{Name: "string"},
+									},
+									{
+										Names: []*ast.Ident{{Name: "path"}},
+										Type:  &ast.Ident{Name: "string"},
+									},
+									{
+										Names: []*ast.Ident{{Name: "query"}},
+										Type:  &ast.Ident{Name: "any"},
+									},
+									{
+										Names: []*ast.Ident{{Name: "payload"}},
+										Type:  &ast.Ident{Name: "any"},
+									},
+								},
+							},
+							Results: &ast.FieldList{
+								List: []*ast.Field{
+									{
+										Type: &ast.Ident{Name: "error"},
+									},
+								},
 							},
 						},
 					},
