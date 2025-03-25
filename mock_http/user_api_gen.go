@@ -7,7 +7,7 @@ import (
 	"github.com/pdcgo/bertaut/mock_http/models"
 )
 
-func RegisterUserServiceApi(srv UserService, g *gin.RouterGroup, doc func(method string, path string, query any, payload any) error) {
+func RegisterUserServicesApi(srv UserService, g *gin.RouterGroup, doc func(method string, path string, query any, payload any) error) {
 	var err error
 	g.Handle(http.MethodGet, "/users/item", func(ctx *gin.Context) {
 		var result1 User

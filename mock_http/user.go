@@ -53,6 +53,14 @@ type UserService interface {
 	GetRole(identity *Identity, custom *CustomPayload) error
 }
 
+// bertaut_api: /wares
+// test doc
+type WareService interface {
+	// method: get
+	// Deprecated: asdasdasd
+	Item(query *ItemQuery, payload *CCPayload) (User, error)
+}
+
 // func(ctx *gin.Context) {
 // 	var err error
 // 	err = srv.CreateUser()

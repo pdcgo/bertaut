@@ -114,7 +114,7 @@ func (r *RegisterFile) RegisterFunc(handle func() ([]*ast.CallExpr, error)) *Reg
 
 	for _, stmt := range stmts {
 		body = append(body, &ast.ExprStmt{X: stmt})
-		body = append(body, documentationCall("/users"))
+		body = append(body, documentationCall("/users", AstNil(), AstNil()))
 	}
 
 	funcname := "Register" + r.ctx.t.Name + "Api"

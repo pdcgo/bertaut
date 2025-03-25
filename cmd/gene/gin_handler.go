@@ -218,7 +218,7 @@ func buildFromCtx(callname string) *ast.AssignStmt {
 	return assignStmt
 }
 
-func documentationCall(uri string) *ast.IfStmt {
+func documentationCall(uri string, query ast.Expr, payload ast.Expr) *ast.IfStmt {
 	ifStmt := &ast.IfStmt{
 		Cond: &ast.BinaryExpr{
 			X:  &ast.Ident{Name: "doc"},
@@ -249,8 +249,8 @@ func documentationCall(uri string) *ast.IfStmt {
 									Op: token.ADD,
 									Y:  &ast.BasicLit{Kind: token.STRING, Value: fmt.Sprintf(`"%s"`, uri)},
 								},
-								&ast.Ident{Name: "nil"},
-								&ast.Ident{Name: "nil"},
+								query,
+								payload,
 							},
 						},
 					},
